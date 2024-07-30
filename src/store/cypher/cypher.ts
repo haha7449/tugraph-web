@@ -377,6 +377,7 @@ export default class Cypher extends VuexModule {
                     oldGraphData.labels.find((item) => {
                         return item.name === l.name
                     })
+                // 非重复才添加
                 if (!target) {
                     newLabels.push(l)
                 }
@@ -870,6 +871,7 @@ export default class Cypher extends VuexModule {
                 vid = parseInt(vid)
                 nodeIds.push(vid)
             })
+            // 去重技巧
             nodeIds = [...new Set(nodeIds)]
         }
         if (nodeIds.length > 1) {

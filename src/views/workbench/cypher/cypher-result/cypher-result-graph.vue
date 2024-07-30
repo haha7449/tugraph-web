@@ -68,18 +68,10 @@ export default class WorkbenchCypherResultGraph extends Vue {
     addEdgeStatus: boolean = false
     _cyMethod: any = null
     @Prop(String) tabValue!: string
+
+    //  ----- get相关Start -----
     get activeTabValue() {
         return this.cypherStore.tabValue
-    }
-    @Watch('activeTabValue')
-    onChangeActiveTabValue() {
-        this.fixed()
-        if (this.activeTabValue === this.tabValue) {
-            this.unfixed()
-            if (this.currentLayoutOption.name === 'euler') {
-                this.panSource()
-            }
-        }
     }
     get fixedActive() {
         let data = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
@@ -90,17 +82,10 @@ export default class WorkbenchCypherResultGraph extends Vue {
         let data = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
         return data && data.btns.mergeEdge.active
     }
-
-    @Watch('isMergeEdge')
-    onChangeIsMergeEdge() {
-        this.mergeEdge()
-    }
-
     get isHover() {
         let data = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
         return data && data.btns.hover.active
     }
-
     get isMethod() {
         let data = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
         return data && data.btns.method.active
@@ -117,6 +102,23 @@ export default class WorkbenchCypherResultGraph extends Vue {
     }
     get aStar() {
         return this.graphData.visualMethod.aStar
+    }
+    //  ----- get相关End -----
+
+    //  ----- Watch相关Start -----
+    @Watch('activeTabValue')
+    onChangeActiveTabValue() {
+        this.fixed()
+        if (this.activeTabValue === this.tabValue) {
+            this.unfixed()
+            if (this.currentLayoutOption.name === 'euler') {
+                this.panSource()
+            }
+        }
+    }
+    @Watch('isMergeEdge')
+    onChangeIsMergeEdge() {
+        this.mergeEdge()
     }
     @Watch('graphData', { immediate: true, deep: true })
     onChangeGraphData(newVal: any, oldVal: any) {
@@ -156,9 +158,234 @@ export default class WorkbenchCypherResultGraph extends Vue {
             this.upDateShowByFilter()
         }
     }
+    //  ----- Watch相关End -----
+
+    //  ----- 更新数据Start -----
+    upDateColor(data: any) {
+        let selector = data.labelName
+        let target
+        if (data.type === 'node') {
+            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
+        } else {
+            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
+        }
+        target.forEach((item: any) => {
+            item.data('color', data.color)
+            item.data('mergeData') &&
+                item.data('mergeData').forEach((item: any) => {
+                    item.color = data.color
+                })
+            item.data('borderColor', data.borderColor)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateColor' })
+    }
+    upDateSize(data: any) {
+        let selector = data.labelName
+        let target
+        if (data.type === 'node') {
+            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
+        } else {
+            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
+        }
+        target.forEach((item: any) => {
+            item.data('size', data.size)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateSize' })
+    }
+    upDateActiveProp(data: any) {
+        let selector = data.labelName
+        let target
+        if (data.type === 'node') {
+            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
+        } else {
+            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
+        }
+        target.forEach((item: any) => {
+            item.data('displayName', data.propName)
+            item.data('displayNameSource', data.propNameSource)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateActiveProp' })
+    }
+    upDateByDbClick(data?: any) {
+        console.time('drawAddNode-dbclick')
+        this._cy.nodes().forEach((item: any) => {
+            item.lock()
+        })
+        this._cy.nodes('.large').forEach((node: any) => {
+            node.data('mergeData').forEach((item) => {
+                let target = this.cyNodes.find((n) => n.data.id === item.id)
+                if (target) {
+                    target.classes = [...['hidden', 'isMerge'], ...target.classes]
+                }
+            })
+        })
+        this._cy.add({
+            nodes: this.cyNodes,
+            edges: this.cyEdges
+        })
+        this.upDateShowByFilter()
+        this._layout.stop()
+        this._cy
+            .layout({ name: 'grid' })
+            .run()
+            .stop()
+        this._layout = this._cy.layout(this.currentLayoutOption)
+        this._layout.run()
+        this._cy.fit()
+        this._cy.zoom({
+            level: this.zoomLevel
+        })
+        this._currenDbClickNode && this._cy.center(this._currenDbClickNode)
+        this._cy.nodes().forEach((item: any) => {
+            item.unlock()
+            let id = item.data('id')
+            let isFixedNode = this.fixNodeList[id]
+            if (!isFixedNode) {
+                item.scratch().euler && (item.scratch().euler.locked = false)
+            }
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDbClick' })
+        console.timeEnd('drawAddNode-dbclick')
+        // ??????????
+        if (this.fixedActive) {
+            setTimeout(() => {
+                this.fixed()
+            }, 4000)
+        }
+    }
+    upDateByAddNode(data: any) {
+        console.time('drawAddNode-create')
+        this._cy.nodes().forEach((item: any) => {
+            item.lock()
+        })
+        this._cy.add({
+            nodes: this.cyNodes
+        })
+        this._layout.stop()
+        this._cy
+            .layout({ name: 'grid' })
+            .run()
+            .stop()
+        this._layout = this._cy.layout(this.currentLayoutOption)
+        this._layout.run()
+        this._cy.fit()
+        this._cy.zoom({
+            level: this.zoomLevel
+        })
+        let newNode = this._cy.$(`#${data.options.vid}`)
+        newNode.addClass('hover')
+        this._cy.center(newNode)
+        this._cy.nodes().forEach((item: any) => {
+            item.unlock()
+            let id = item.data('id')
+            let isFixedNode = this.fixNodeList[id]
+            if (!isFixedNode) {
+                item.scratch().euler && (item.scratch().euler.locked = false)
+            }
+        })
+        this.panSource()
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByAddNode' })
+        console.timeEnd('drawAddNode-create')
+    }
+    upDateByAddEdge(data: any) {
+        this._cy.add({
+            edges: this.cyEdges
+        })
+        let mergeData = this._cy.edges('#' + data.options.uid).data().mergeData
+        let uid = data.options.uid.split('_')
+        let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
+        this._cy.filter(`[ id ^= "${sdl}"]`).forEach((item: any) => {
+            item.data('mergeData', mergeData)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByAddEdge' })
+    }
+    upDateByEditNode(data: any) {
+        let targetNode = this._cy.nodes('#' + data.options.vid)
+        targetNode.data('properties', data.options.properties)
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByEditNode' })
+    }
+    upDateByEditEdge(data: any) {
+        let targetNode = this._cy.edges('#' + data.options.uid)
+        targetNode.data('properties', data.options.properties)
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByEditEdge' })
+    }
+    upDateByDeleteNode(data: any) {
+        data.options.forEach((id: any) => {
+            this._cy.remove('#' + id)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDeleteNode' })
+    }
+    upDateByDeleteEdge(data: any) {
+        data.options.forEach((id: any) => {
+            this._cy.remove('#' + id)
+            this._cy.edges('.large').forEach((item) => {
+                if (item.data('sysPropties').uid == id) {
+                    let uid = item.data('id')
+                    this._cy.remove('#' + uid)
+                }
+            })
+        })
+        let uid = data.options[0].split('_')
+        let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
+        let mergeData = this.cyEdges[0].data.mergeData
+        this._cy.filter(`[ id ^= "${sdl}"]`).forEach((item: any) => {
+            item.data('mergeData', mergeData)
+        })
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDeleteEdge' })
+    }
+    upDateShow(data: any) {
+        let labelName = data.options.labelName
+        let status = data.options.status
+        let type = data.options.type
+        if (!status) {
+            type === 'node' && this._cy.nodes('.' + labelName).addClass('hidden')
+            type === 'edge' && this._cy.edges('.' + labelName).addClass('hidden')
+        } else {
+            type === 'node' && this._cy.nodes('.' + labelName).removeClass('hidden')
+            type === 'edge' && this._cy.edges('.' + labelName).removeClass('hidden')
+        }
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateShow' })
+    }
+    upDateShowByFilter() {
+        let data = this.graphData.filterList || []
+        data.forEach((item) => {
+            this._cy.$('.' + item.label).addClass('hidden')
+            if (item.on === true) {
+                let params = item.paramsList.filter((p) => p.value !== null)
+                if (params.length === 0) {
+                    this._cy[item.type + 's']('.' + item.label).removeClass('hidden')
+                } else {
+                    params.forEach((p) => {
+                        this._cy.$('.' + item.label).forEach((ele) => {
+                            let obj = ele.data('properties')
+                            let res: boolean
+                            if (p.labelType === 'number') {
+                                res = eval(obj[p.prop] + p.connect + p.value)
+                            } else {
+                                res = eval(JSON.stringify(obj[p.prop]) + p.connect + JSON.stringify(p.value))
+                            }
+                            if (res) {
+                                ele.removeClass('hidden')
+                            }
+                        })
+                    })
+                }
+            } else {
+                this._cy[item.type + 's']('.' + item.label).removeClass('hidden')
+            }
+        })
+        if (data.length === 0) {
+            this._cy.$().removeClass('hidden')
+        }
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateShowByFilter' })
+    }
+    //  ----- 更新数据End -----
+
+    //  ----- 生命周期Start -----
     created() {}
     mounted() {
         this.drawGraph()
+        // 将方法挂载到cyEvents, 其他组件可以调用此方法
         this.$cyEvents[this.tabValue] = {
             focusNode: (nodeId: string) => {
                 this.focusNode(nodeId)
@@ -310,28 +537,10 @@ export default class WorkbenchCypherResultGraph extends Vue {
             }, 1000)
         }
     }
-    cyLayout(data: string) {
-        this._layout.pon('layoutstop').then((event) => {
-            if (data === 'grid') {
-                this._layout = this._cy.layout(this.gridOption)
-            } else if (data === 'force') {
-                this._layout = this._cy.layout(this.forceOption)
-            } else if (data === 'tree') {
-                this._layout = this._cy.layout(this.treeOption)
-            } else if (data === 'circle') {
-                this._layout = this._cy.layout(this.circleOption)
-            }
-            this.currentLayoutOption = this[data + 'Option']
-            this._layout.run()
-            if (this.currentLayoutOption.name === 'euler') {
-                this._cy.pan({
-                    x: this._cyDom.clientWidth / 2,
-                    y: this._cyDom.clientHeight / 2
-                })
-            }
-        })
-        this._layout.stop()
-    }
+    //  ----- 生命周期End -----
+
+    //  ----- 渲染图Start -----
+    // 渲染图
     drawGraph() {
         console.time('draw-graph')
 
@@ -339,8 +548,11 @@ export default class WorkbenchCypherResultGraph extends Vue {
         let domWidth = dom && dom.clientWidth
         let domHeight = dom && dom.clientHeight
         let option = { ...CyConfig, ...{ container: dom } }
+        // 添加节点和边数据
         option.elements.nodes = this.cyNodes
         option.elements.edges = this.cyEdges
+
+        // 添加各种插件
         this._cy = cytoscape(option)
         // window.lpf = this._cy
         this._eh = this._cy.edgehandles(ADDEDGEOPTION)
@@ -415,23 +627,7 @@ export default class WorkbenchCypherResultGraph extends Vue {
         })
         console.timeEnd('draw-graph')
     }
-    focusNode(nodeId: string) {
-        if (nodeId) {
-            let node = this._cy.nodes(`#${nodeId}`)
-            let label = node.data().sysPropties.label
-            this.cypherStore.upDateActiveElement({
-                tabValue: this.tabValue,
-                data: [node.data()]
-            })
-            this._cy.center(node)
-            node.addClass('active')
-        }
-    }
-    focusSourceOrEndNode(status: boolean) {
-        this.cypherStore.updateGraphDataAddEdgeSrcAndDst({ tabValue: this.tabValue, addEdgeSrcAndDst: [] })
-        this.addEdgeStatus = status
-        this._cy.remove(this._cy.edges('.add-new-edge'))
-    }
+    // 添加node、cy画布相关事件
     addEventToCy(
         events: Array<{
             eventType: string
@@ -448,6 +644,7 @@ export default class WorkbenchCypherResultGraph extends Vue {
             }
         })
     }
+    // 创建cy格式的node、egde数据
     createCyDatas(data: Array<any>, type: string) {
         let newData: Array<any> = []
         let sdlList: Array<any> = []
@@ -497,408 +694,9 @@ export default class WorkbenchCypherResultGraph extends Vue {
         })
         return newData
     }
-    upDateColor(data: any) {
-        let selector = data.labelName
-        let target
-        if (data.type === 'node') {
-            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
-        } else {
-            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
-        }
-        target.forEach((item: any) => {
-            item.data('color', data.color)
-            item.data('mergeData') &&
-                item.data('mergeData').forEach((item: any) => {
-                    item.color = data.color
-                })
-            item.data('borderColor', data.borderColor)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateColor' })
-    }
-    upDateSize(data: any) {
-        let selector = data.labelName
-        let target
-        if (data.type === 'node') {
-            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
-        } else {
-            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
-        }
-        target.forEach((item: any) => {
-            item.data('size', data.size)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateSize' })
-    }
-    upDateActiveProp(data: any) {
-        let selector = data.labelName
-        let target
-        if (data.type === 'node') {
-            target = this._cy.nodes().filter((item) => item.data('sysPropties').label === selector)
-        } else {
-            target = this._cy.edges().filter((item) => item.data('sysPropties').label === selector)
-        }
-        target.forEach((item: any) => {
-            item.data('displayName', data.propName)
-            item.data('displayNameSource', data.propNameSource)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateActiveProp' })
-    }
-    upDateByDbClick(data?: any) {
-        console.time('drawAddNode-dbclick')
-        this._cy.nodes().forEach((item: any) => {
-            item.lock()
-        })
-        this._cy.nodes('.large').forEach((node: any) => {
-            node.data('mergeData').forEach((item) => {
-                let target = this.cyNodes.find((n) => n.data.id === item.id)
-                if (target) {
-                    target.classes = [...['hidden', 'isMerge'], ...target.classes]
-                }
-            })
-        })
-        this._cy.add({
-            nodes: this.cyNodes,
-            edges: this.cyEdges
-        })
-        this.upDateShowByFilter()
-        this._layout.stop()
-        this._cy
-            .layout({ name: 'grid' })
-            .run()
-            .stop()
-        this._layout = this._cy.layout(this.currentLayoutOption)
-        this._layout.run()
-        this._cy.fit()
-        this._cy.zoom({
-            level: this.zoomLevel
-        })
-        this._currenDbClickNode && this._cy.center(this._currenDbClickNode)
-        this._cy.nodes().forEach((item: any) => {
-            item.unlock()
-            let id = item.data('id')
-            let isFixedNode = this.fixNodeList[id]
-            if (!isFixedNode) {
-                item.scratch().euler && (item.scratch().euler.locked = false)
-            }
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDbClick' })
-        console.timeEnd('drawAddNode-dbclick')
-        if (this.fixedActive) {
-            setTimeout(() => {
-                this.fixed()
-            }, 4000)
-        }
-    }
-    upDateByAddNode(data: any) {
-        console.time('drawAddNode-create')
-        this._cy.nodes().forEach((item: any) => {
-            item.lock()
-        })
-        this._cy.add({
-            nodes: this.cyNodes
-        })
-        this._layout.stop()
-        this._cy
-            .layout({ name: 'grid' })
-            .run()
-            .stop()
-        this._layout = this._cy.layout(this.currentLayoutOption)
-        this._layout.run()
-        this._cy.fit()
-        this._cy.zoom({
-            level: this.zoomLevel
-        })
-        let newNode = this._cy.$(`#${data.options.vid}`)
-        newNode.addClass('hover')
-        this._cy.center(newNode)
-        this._cy.nodes().forEach((item: any) => {
-            item.unlock()
-            let id = item.data('id')
-            let isFixedNode = this.fixNodeList[id]
-            if (!isFixedNode) {
-                item.scratch().euler && (item.scratch().euler.locked = false)
-            }
-        })
-        this.panSource()
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByAddNode' })
-        console.timeEnd('drawAddNode-create')
-    }
-    upDateByAddEdge(data: any) {
-        this._cy.add({
-            edges: this.cyEdges
-        })
-        let mergeData = this._cy.edges('#' + data.options.uid).data().mergeData
-        let uid = data.options.uid.split('_')
-        let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
-        this._cy.filter(`[ id ^= "${sdl}"]`).forEach((item: any) => {
-            item.data('mergeData', mergeData)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByAddEdge' })
-    }
-    upDateByEditNode(data: any) {
-        let targetNode = this._cy.nodes('#' + data.options.vid)
-        targetNode.data('properties', data.options.properties)
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByEditNode' })
-    }
-    upDateByEditEdge(data: any) {
-        let targetNode = this._cy.edges('#' + data.options.uid)
-        targetNode.data('properties', data.options.properties)
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByEditEdge' })
-    }
-    upDateByDeleteNode(data: any) {
-        data.options.forEach((id: any) => {
-            this._cy.remove('#' + id)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDeleteNode' })
-    }
-    upDateByDeleteEdge(data: any) {
-        data.options.forEach((id: any) => {
-            this._cy.remove('#' + id)
-            this._cy.edges('.large').forEach((item) => {
-                if (item.data('sysPropties').uid == id) {
-                    let uid = item.data('id')
-                    this._cy.remove('#' + uid)
-                }
-            })
-        })
-        let uid = data.options[0].split('_')
-        let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
-        let mergeData = this.cyEdges[0].data.mergeData
-        this._cy.filter(`[ id ^= "${sdl}"]`).forEach((item: any) => {
-            item.data('mergeData', mergeData)
-        })
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateByDeleteEdge' })
-    }
-    upDateShow(data: any) {
-        let labelName = data.options.labelName
-        let status = data.options.status
-        let type = data.options.type
-        if (!status) {
-            type === 'node' && this._cy.nodes('.' + labelName).addClass('hidden')
-            type === 'edge' && this._cy.edges('.' + labelName).addClass('hidden')
-        } else {
-            type === 'node' && this._cy.nodes('.' + labelName).removeClass('hidden')
-            type === 'edge' && this._cy.edges('.' + labelName).removeClass('hidden')
-        }
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateShow' })
-    }
-    upDateShowByFilter() {
-        let data = this.graphData.filterList || []
-        data.forEach((item) => {
-            this._cy.$('.' + item.label).addClass('hidden')
-            if (item.on === true) {
-                let params = item.paramsList.filter((p) => p.value !== null)
-                if (params.length === 0) {
-                    this._cy[item.type + 's']('.' + item.label).removeClass('hidden')
-                } else {
-                    params.forEach((p) => {
-                        this._cy.$('.' + item.label).forEach((ele) => {
-                            let obj = ele.data('properties')
-                            let res: boolean
-                            if (p.labelType === 'number') {
-                                res = eval(obj[p.prop] + p.connect + p.value)
-                            } else {
-                                res = eval(JSON.stringify(obj[p.prop]) + p.connect + JSON.stringify(p.value))
-                            }
-                            if (res) {
-                                ele.removeClass('hidden')
-                            }
-                        })
-                    })
-                }
-            } else {
-                this._cy[item.type + 's']('.' + item.label).removeClass('hidden')
-            }
-        })
-        if (data.length === 0) {
-            this._cy.$().removeClass('hidden')
-        }
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'upDateShowByFilter' })
-    }
-    mergeEdge() {
-        if (this.isMergeEdge) {
-            let sdlList: Array<any> = []
-            this._cy.edges().forEach((ele: any) => {
-                ele.addClass('merge')
-                let uid = ele.data('id').split('_')
-                let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
-                !sdlList.includes(sdl) && sdlList.push(sdl) && ele.addClass('first')
-            })
-        } else {
-            this._cy.edges().removeClass('merge', 'first')
-        }
-        this._cy.edges().removeClass('active')
-        this.cypherStore.upDateActiveElement({
-            tabValue: this.tabValue,
-            data: []
-        })
-    }
+    //  ----- 渲染图End -----
 
-    fixed() {
-        this._layout && this._layout.stop()
-    }
-    unfixed() {
-        this._cy.nodes().forEach((item: any) => {
-            item.lock()
-        })
-        this._cy.layout({ name: 'grid' })
-        this._layout = this._cy.layout(this.currentLayoutOption)
-        this._layout.run()
-        this._cy.nodes().forEach((item: any) => {
-            item.unlock()
-            let id = item.data('id')
-            let isFixedNode = this.fixNodeList[id]
-            if (!isFixedNode) {
-                item.scratch().euler && (item.scratch().euler.locked = false)
-            }
-        })
-    }
-    panSource() {
-        this._cy.pan({
-            x: this._cyDom.clientWidth / 2,
-            y: this._cyDom.clientHeight / 2
-        })
-    }
-    exportPNG() {
-        this.fixed()
-        this._cy
-            .png({
-                full: true,
-                output: 'blob-promise',
-                maxWidth: 3656 * 5,
-                maxHeight: 2644 * 5
-            })
-            .then((res: any) => {
-                let name: Date = new Date()
-                let fileName = 'graph图(' + name.toUTCString() + ')'
-                downloadFile(fileName, res)
-                this.unfixed()
-            })
-    }
-    exportJSON() {
-        let name: Date = new Date()
-        let data = JSON.stringify(this.graphData.graph)
-        // 如果查询结果没有节点，就将cypher的查询结果输出
-        if (this.graphData.graph.nodes.length === 0) {
-            let target: any = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
-            data = target.cypherReasultData.codeData.data.result
-            data = JSON.stringify(data)
-        }
-        let fileName = 'graph图(' + name.toUTCString() + ').json'
-        downloadFile(fileName, new Blob([data]))
-    }
-    exportCSV() {
-        let name: Date = new Date()
-        let fileName = 'graph图(' + name.toUTCString() + ').csv'
-        let labels = this.graphData.labels
-        let graph = this.graphData.graph
-        let data = {
-            nodes: {},
-            edges: {}
-        }
-        if (graph.nodes.length > 0) {
-            labels.forEach((item) => {
-                if (item.name !== '*NODES' && item.name !== '*EDGES') {
-                    let name = item.name
-                    if (item.type === 'node') {
-                        let content = ``
-                        let header = ``
-                        if (item.props.length) {
-                            header = item.props.join(',') + ',vid' + '\n'
-                        } else {
-                            header = 'vid' + '\n'
-                        }
-                        let list = graph.nodes.filter((c) => c.label === name)
-                        list.forEach((node) => {
-                            item.props.forEach((p) => {
-                                content += node.properties[p] + ','
-                            })
-                            content += node.vid + '\n'
-                        })
-                        data.nodes[name] = header + content
-                    } else {
-                        let content = ``
-                        let header = ``
-                        if (item.props.length) {
-                            header = item.props.join(',') + ',uid,src,dst' + '\n'
-                        } else {
-                            header = 'uid,src,dst' + '\n'
-                        }
-
-                        let list = graph.edges.filter((c) => c.label === name)
-                        list.forEach((edge) => {
-                            item.props.forEach((p) => {
-                                content += edge.properties[p] + ','
-                            })
-                            content += edge.uid + ',' + edge.source + ',' + edge.destination + '\n'
-                        })
-                        data.edges[name] = header + content
-                    }
-                }
-            })
-            let fileContentNodes = ``
-            let fileContentEdges = ``
-            Object.keys(data.nodes).forEach((k, index) => {
-                if (index === 0) {
-                    fileContentNodes += `LABEL=${k}\n${data.nodes[k]}`
-                } else {
-                    fileContentNodes += `${data.nodes[k]}`
-                }
-            })
-            Object.keys(data.edges).forEach((k, index) => {
-                if (index === 0) {
-                    fileContentEdges += `LABEL=${k}\n${data.edges[k]}`
-                } else {
-                    fileContentEdges += `${data.edges[k]}`
-                }
-            })
-            let file = 'NODES\n' + fileContentNodes + '\n' + 'EDGES\n' + fileContentEdges
-            downloadFile(fileName, new Blob([file]))
-        }
-        // 如果查询结果没有节点，就将cypher的查询结果输出
-        if (graph.nodes.length === 0) {
-            let target: any = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
-            let data = target.cypherReasultData.codeData.data.result
-            let content = ''
-            data.forEach((row) => {
-                content += row.toString() + '\n'
-            })
-            downloadFile(fileName, new Blob([content]))
-        }
-    }
-    refresh() {
-        this._cy.remove(this._cy.$())
-        this._cy.resize()
-        this._cy.add({
-            nodes: this.cyNodes,
-            edges: this.cyEdges
-        })
-        this._layout.stop()
-        this._cy
-            .layout({ name: 'grid' })
-            .run()
-            .stop()
-        this._layout = this._cy.layout(this.currentLayoutOption)
-        this._layout.run()
-        this._cy.fit()
-        this._cy.zoom({
-            level: this.zoomLevel
-        })
-
-        if (this.currentLayoutOption.name === 'euler') {
-            this._cy.pan({
-                x: this._cyDom.clientWidth / 2,
-                y: this._cyDom.clientHeight / 2
-            })
-        }
-
-        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'refresh' })
-    }
-    closeCxttapend() {
-        let dom = this.$refs['workbenchCypherResultGraph']
-        let child = dom.querySelector('#popperSearch')
-        child && dom.removeChild(child)
-    }
-    //  ----- 鼠标交互事件Start -----
+    //  ----- addEventToCy: 鼠标交互事件Start -----
     // 单击[点]
     nodeClick(e: any) {
         let node = e.target
@@ -1082,6 +880,235 @@ export default class WorkbenchCypherResultGraph extends Vue {
         }
     }
     //  ----- 鼠标交互事件End -----
+
+    //  ----- $cyEvents(相当于export的方法, 其他组件可通过this调用) Start -----
+    // 右侧数据格式graph table code
+    cyLayout(data: string) {
+        this._layout.pon('layoutstop').then((event) => {
+            if (data === 'grid') {
+                this._layout = this._cy.layout(this.gridOption)
+            } else if (data === 'force') {
+                this._layout = this._cy.layout(this.forceOption)
+            } else if (data === 'tree') {
+                this._layout = this._cy.layout(this.treeOption)
+            } else if (data === 'circle') {
+                this._layout = this._cy.layout(this.circleOption)
+            }
+            this.currentLayoutOption = this[data + 'Option']
+            this._layout.run()
+            if (this.currentLayoutOption.name === 'euler') {
+                this._cy.pan({
+                    x: this._cyDom.clientWidth / 2,
+                    y: this._cyDom.clientHeight / 2
+                })
+            }
+        })
+        this._layout.stop()
+    }
+    focusNode(nodeId: string) {
+        if (nodeId) {
+            let node = this._cy.nodes(`#${nodeId}`)
+            let label = node.data().sysPropties.label
+            this.cypherStore.upDateActiveElement({
+                tabValue: this.tabValue,
+                data: [node.data()]
+            })
+            this._cy.center(node)
+            node.addClass('active')
+        }
+    }
+    // add-edge 相关
+    focusSourceOrEndNode(status: boolean) {
+        this.cypherStore.updateGraphDataAddEdgeSrcAndDst({ tabValue: this.tabValue, addEdgeSrcAndDst: [] })
+        this.addEdgeStatus = status
+        this._cy.remove(this._cy.edges('.add-new-edge'))
+    }
+    mergeEdge() {
+        if (this.isMergeEdge) {
+            let sdlList: Array<any> = []
+            this._cy.edges().forEach((ele: any) => {
+                ele.addClass('merge')
+                let uid = ele.data('id').split('_')
+                let sdl = uid[0] + '_' + uid[1] + '_' + uid[2]
+                !sdlList.includes(sdl) && sdlList.push(sdl) && ele.addClass('first')
+            })
+        } else {
+            this._cy.edges().removeClass('merge', 'first')
+        }
+        this._cy.edges().removeClass('active')
+        this.cypherStore.upDateActiveElement({
+            tabValue: this.tabValue,
+            data: []
+        })
+    }
+    // 没有力导
+    fixed() {
+        this._layout && this._layout.stop()
+    }
+    // 力导
+    unfixed() {
+        this._cy.nodes().forEach((item: any) => {
+            item.lock()
+        })
+        this._cy.layout({ name: 'grid' })
+        this._layout = this._cy.layout(this.currentLayoutOption)
+        this._layout.run()
+        this._cy.nodes().forEach((item: any) => {
+            item.unlock()
+            let id = item.data('id')
+            let isFixedNode = this.fixNodeList[id]
+            if (!isFixedNode) {
+                item.scratch().euler && (item.scratch().euler.locked = false)
+            }
+        })
+    }
+    panSource() {
+        this._cy.pan({
+            x: this._cyDom.clientWidth / 2,
+            y: this._cyDom.clientHeight / 2
+        })
+    }
+    exportPNG() {
+        this.fixed()
+        this._cy
+            .png({
+                full: true,
+                output: 'blob-promise',
+                maxWidth: 3656 * 5,
+                maxHeight: 2644 * 5
+            })
+            .then((res: any) => {
+                let name: Date = new Date()
+                let fileName = 'graph图(' + name.toUTCString() + ')'
+                downloadFile(fileName, res)
+                this.unfixed()
+            })
+    }
+    exportJSON() {
+        let name: Date = new Date()
+        let data = JSON.stringify(this.graphData.graph)
+        // 如果查询结果没有节点，就将cypher的查询结果输出
+        if (this.graphData.graph.nodes.length === 0) {
+            let target: any = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
+            data = target.cypherReasultData.codeData.data.result
+            data = JSON.stringify(data)
+        }
+        let fileName = 'graph图(' + name.toUTCString() + ').json'
+        downloadFile(fileName, new Blob([data]))
+    }
+    exportCSV() {
+        let name: Date = new Date()
+        let fileName = 'graph图(' + name.toUTCString() + ').csv'
+        let labels = this.graphData.labels
+        let graph = this.graphData.graph
+        let data = {
+            nodes: {},
+            edges: {}
+        }
+        if (graph.nodes.length > 0) {
+            labels.forEach((item) => {
+                if (item.name !== '*NODES' && item.name !== '*EDGES') {
+                    let name = item.name
+                    if (item.type === 'node') {
+                        let content = ``
+                        let header = ``
+                        if (item.props.length) {
+                            header = item.props.join(',') + ',vid' + '\n'
+                        } else {
+                            header = 'vid' + '\n'
+                        }
+                        let list = graph.nodes.filter((c) => c.label === name)
+                        list.forEach((node) => {
+                            item.props.forEach((p) => {
+                                content += node.properties[p] + ','
+                            })
+                            content += node.vid + '\n'
+                        })
+                        data.nodes[name] = header + content
+                    } else {
+                        let content = ``
+                        let header = ``
+                        if (item.props.length) {
+                            header = item.props.join(',') + ',uid,src,dst' + '\n'
+                        } else {
+                            header = 'uid,src,dst' + '\n'
+                        }
+
+                        let list = graph.edges.filter((c) => c.label === name)
+                        list.forEach((edge) => {
+                            item.props.forEach((p) => {
+                                content += edge.properties[p] + ','
+                            })
+                            content += edge.uid + ',' + edge.source + ',' + edge.destination + '\n'
+                        })
+                        data.edges[name] = header + content
+                    }
+                }
+            })
+            let fileContentNodes = ``
+            let fileContentEdges = ``
+            Object.keys(data.nodes).forEach((k, index) => {
+                if (index === 0) {
+                    fileContentNodes += `LABEL=${k}\n${data.nodes[k]}`
+                } else {
+                    fileContentNodes += `${data.nodes[k]}`
+                }
+            })
+            Object.keys(data.edges).forEach((k, index) => {
+                if (index === 0) {
+                    fileContentEdges += `LABEL=${k}\n${data.edges[k]}`
+                } else {
+                    fileContentEdges += `${data.edges[k]}`
+                }
+            })
+            let file = 'NODES\n' + fileContentNodes + '\n' + 'EDGES\n' + fileContentEdges
+            downloadFile(fileName, new Blob([file]))
+        }
+        // 如果查询结果没有节点，就将cypher的查询结果输出
+        if (graph.nodes.length === 0) {
+            let target: any = this.cypherStore.cypherReasultDatas.find((item) => item.id === this.tabValue)
+            let data = target.cypherReasultData.codeData.data.result
+            let content = ''
+            data.forEach((row) => {
+                content += row.toString() + '\n'
+            })
+            downloadFile(fileName, new Blob([content]))
+        }
+    }
+    refresh() {
+        this._cy.remove(this._cy.$())
+        this._cy.resize()
+        this._cy.add({
+            nodes: this.cyNodes,
+            edges: this.cyEdges
+        })
+        this._layout.stop()
+        this._cy
+            .layout({ name: 'grid' })
+            .run()
+            .stop()
+        this._layout = this._cy.layout(this.currentLayoutOption)
+        this._layout.run()
+        this._cy.fit()
+        this._cy.zoom({
+            level: this.zoomLevel
+        })
+
+        if (this.currentLayoutOption.name === 'euler') {
+            this._cy.pan({
+                x: this._cyDom.clientWidth / 2,
+                y: this._cyDom.clientHeight / 2
+            })
+        }
+
+        this.cypherStore.upDateActionLogByEnd({ tabValue: this.tabValue, actionName: 'refresh' })
+    }
+    closeCxttapend() {
+        let dom = this.$refs['workbenchCypherResultGraph']
+        let child = dom.querySelector('#popperSearch')
+        child && dom.removeChild(child)
+    }
+    //  ----- $cyEvents End -----
 }
 </script>
 <style lang="less" scoped>
